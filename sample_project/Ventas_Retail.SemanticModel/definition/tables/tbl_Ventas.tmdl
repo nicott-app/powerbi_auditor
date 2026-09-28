@@ -1,0 +1,43 @@
+table tbl_Ventas
+
+	column OrderNumber
+		dataType: string
+		summarizeBy: none
+
+	column CustomerKey
+		dataType: int64
+		summarizeBy: none
+
+	column ProductKey
+		dataType: int64
+		summarizeBy: none
+
+	column OrderDate
+		dataType: dateTime
+		summarizeBy: none
+
+	column Quantity
+		dataType: int64
+		summarizeBy: sum
+
+	column 'Unit Price'
+		dataType: double
+		summarizeBy: none
+
+	column Amount
+		dataType: double
+		summarizeBy: sum
+
+	measure 'Margen Error' = IFERROR([Total Ventas] / [Total Coste], 0)
+
+	measure 'Ventas Grandes' = CALCULATE(SUM(tbl_Ventas[Amount]), FILTER(tbl_Ventas, tbl_Ventas[Amount] > 1000))
+
+	measure 'Total Ventas' = SUM(tbl_Ventas[Amount])
+		displayFolder: 'Métricas'
+
+	measure 'Total Coste' = SUMX(tbl_Ventas, tbl_Ventas[Quantity] * 10)
+		displayFolder: 'Métricas'
+
+	partition tbl_Ventas = m
+		mode: import
+		source = Source

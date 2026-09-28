@@ -1,0 +1,5 @@
+relationship 12345-6789
+	fromColumn: 'tbl_Ventas'[CustomerKey]
+	toColumn: 'dim_Cliente'[CustomerKey]
+	crossFilteringBehavior: bothDirections
+	cardinality: oneToMany

@@ -1,0 +1,19 @@
+table LocalDateTable_123
+	isHidden
+
+	column Date
+		dataType: dateTime
+		isHidden
+		dataCategory: PaddedDateTableDates
+
+	column Year = YEAR([Date])
+		dataType: int64
+		isHidden
+
+	column Month = FORMAT([Date], "MMMM")
+		dataType: string
+		isHidden
+
+	partition LocalDateTable_123 = calculated
+		mode: import
+		source = Calendar(Date(2020,1,1), Date(2025,12,31))

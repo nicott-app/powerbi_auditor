@@ -1,0 +1,27 @@
+# Configuración del Agente Auditor de PowerBI (PBIP)
+service:
+  host: "0.0.0.0"
+  port: 8000
+  title: "PowerBI Model Auditor & Process Optimizer Agent"
+  version: "1.0.0"
+
+ai:
+  model: "gpt-4o-mini"
+  embedding_model: "text-embedding-3-small"
+  temperature: 0.2
+  max_tokens: 4000
+
+rag:
+  db_path: "./data/vector_db"
+  similarity_top_k: 3
+
+audit_rules:
+  enforce_fixed_decimal_for_currency: true
+  hide_foreign_keys: true
+  prohibit_bidirectional_relationships: true
+  prohibit_many_to_many_relationships: true
+  disallow_auto_datetime: true
+  recommend_is_available_in_mdx_false: true
+  require_explicit_measures: true
+  prohibit_iferror_in_dax: true
+  prohibit_table_filters_in_calculate: true

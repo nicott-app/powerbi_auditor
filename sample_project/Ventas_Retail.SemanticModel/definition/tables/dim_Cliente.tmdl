@@ -1,0 +1,21 @@
+table dim_Cliente
+
+	column CustomerKey
+		dataType: int64
+		summarizeBy: none
+
+	column 'Nombre Cliente'
+		dataType: string
+		summarizeBy: none
+
+	column Pais
+		dataType: string
+		summarizeBy: none
+
+	column Ciudad
+		dataType: string
+		summarizeBy: none
+
+	partition dim_Cliente = m
+		mode: import
+		source = Source

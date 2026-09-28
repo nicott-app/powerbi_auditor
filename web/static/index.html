@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power BI Model Auditor - Agente IA Experto</title>
+    
+    <!-- Bootstrap & Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            /* Paleta Nativa Power BI */
+            --pbi-yellow: #F2C811;
+            --pbi-yellow-hover: #E3B90B;
+            --pbi-dark: #252423;
+            --pbi-dark-hover: #1b1a19;
+            --pbi-light: #F3F2F1;
+            --pbi-text: #323130;
+            
+            /* Colores de Severidad */
+            --sev-crit: #D13438; /* Rojo MSFT */
+            --sev-high: #CA5010; /* Naranja MSFT */
+            --sev-med:  #FCE100; /* Amarillo oscuro */
+            --sev-low:  #0078D4; /* Azul MSFT */
+        }
+        
+        body {
+            background-color: #FAF9F8;
+            font-family: 'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif;
+            color: var(--pbi-text);
+        }
+        
+        /* Navegación y Cabeceras */
+        .navbar-custom {
+            background: var(--pbi-dark);
+            border-bottom: 4px solid var(--pbi-yellow);
+        }
+        .hero-banner {
+            background: linear-gradient(145deg, var(--pbi-dark) 0%, #3b3a39 100%);
+            color: white;
+            padding: 1.5rem 0;
+            margin-bottom: 1.5rem;
+            border-radius: 0 0 1.5rem 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        /* Tarjetas con sombras suaves (SaaS) */
+        .card-custom {
+            border: none;
+            border-radius: 12px;
+            background: #ffffff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-custom:hover {
+            box-shadow: 0 12px 28px rgba(0,0,0,0.07), 0 4px 10px rgba(0,0,0,0.04);
+            transform: translateY(-2px);
+        }
+        
+        /* Botones Power BI */
+        .btn-pbi-primary {
+            background-color: var(--pbi-yellow);
+            color: var(--pbi-dark);
+            font-weight: 600;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-pbi-primary:hover {
+            background-color: var(--pbi-yellow-hover);
+            color: black;
+            box-shadow: 0 4px 12px rgba(242, 200, 17, 0.4);
+            transform: translateY(-1px);
+        }
+        .btn-pbi-dark {
+            background-color: var(--pbi-dark);
+            color: white;
+            font-weight: 600;
+            border: none;
+            transition: all 0.2s ease;
+        }
+        .btn-pbi-dark:hover {
+            background-color: var(--pbi-dark-hover);
+            color: white;
+            box-shadow: 0 4px 12px rgba(37, 36, 35, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* Badges */
+        .badge-severity-Crítica { background-color: var(--sev-crit); color: white; }
+        .badge-severity-Alta { background-color: var(--sev-high); color: white; }
+        .badge-severity-Media { background-color: var(--sev-med); color: var(--pbi-dark); }
+        .badge-severity-Baja { background-color: var(--sev-low); color: white; }
+        .badge-severity-Sugerencia { background-color: #107C10; color: white; }
+        
+        /* Gauge Animado SVG */
+        .gauge-container {
+            position: relative;
+            width: 100%;
+            max-width: 220px;
+            margin: 0 auto;
+        }
+        .gauge-svg {
+            width: 100%;
+            height: auto;
+        }
+        .gauge-bg {
+            fill: none;
+            stroke: #edebe9;
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+        .gauge-val {
+            fill: none;
+            stroke: var(--pbi-yellow);
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-dasharray: 125.6; /* 2 * PI * r (donde r=20 de viewBox) */
+            stroke-dashoffset: 125.6;
+            transition: stroke-dashoffset 2s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+        .gauge-text-container {
+            position: absolute;
+            bottom: 10%;
+            left: 0;
+            width: 100%;
+            text-align: center;
+        }
+        .gauge-score {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: var(--pbi-dark);
+            line-height: 1;
+        }
+        .gauge-level {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #605E5C;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Acordeón Elegante */
+        .accordion-button:not(.collapsed) {
+            background-color: var(--pbi-light);
+            color: var(--pbi-dark);
+            box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05);
+        }
+        .accordion-button:focus {
+            box-shadow: 0 0 0 0.25rem rgba(242, 200, 17, 0.25);
+        }
+        .accordion-item {
+            border: 1px solid rgba(0,0,0,0.08);
+            margin-bottom: 0.5rem;
+            border-radius: 8px !important;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+        .accordion-body {
+            background-color: #ffffff;
+        }
+        
+        pre {
+            background-color: #1b1a19;
+            color: #E2E8F0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navegación -->
+    <nav class="navbar navbar-dark navbar-custom px-4 py-2">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
+            <span class="navbar-brand d-flex align-items-center fw-bold fs-4">
+                <i class="bi bi-bar-chart-fill text-warning me-2"></i> Power BI Model Auditor AI
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-secondary" id="serviceStatus"><i class="bi bi-cpu"></i> Conectando...</span>
+                <span class="badge bg-light text-dark border"><i class="bi bi-stars text-warning"></i> RAG Grounded</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Header -->
+    <div class="hero-banner">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-8">
+                    <h2 class="fw-bold mb-2 fs-3">Auditor y Optimizador DAX Avanzado</h2>
+                    <p class="text-light opacity-75 mb-0">
+                        Inspección profunda de proyectos <code>.PBIP</code> mediante Inteligencia Artificial. <br>Basado en el <strong>Manual de Buenas Prácticas de Microsoft</strong> y SQLBI.
+                    </p>
+                </div>
+                <div class="col-lg-4 text-end d-none d-lg-block">
+                    <i class="bi bi-cpu" style="font-size: 3rem; color: var(--pbi-yellow); opacity: 0.9;"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido Principal -->
+    <div class="container pb-5">
+        <div class="row g-4">
+            
+            <!-- Columna Izquierda: Controles -->
+            <div class="col-lg-4">
+                <div class="card card-custom p-4 mb-4">
+                    <h5 class="fw-bold mb-4 text-dark"><i class="bi bi-folder-symlink-fill me-2 text-warning"></i> Origen de Datos</h5>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-secondary">SUBIR ARCHIVO .ZIP (.PBIP)</label>
+                        <input type="file" id="zipFileInput" class="form-control mb-3 shadow-sm" accept=".zip">
+                        
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-pbi-dark" id="btnUploadZip">
+                                <i class="bi bi-shield-check me-2"></i> Auditar Modelo
+                            </button>
+                            <button class="btn btn-outline-dark" id="btnGenerateDocs">
+                                <i class="bi bi-file-earmark-word me-2"></i> Documentación (.docx)
+                            </button>
+                            <button class="btn btn-pbi-primary" id="btnOptimizeDax">
+                                <i class="bi bi-magic me-2"></i> Optimizar DAX (IA)
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="text-muted opacity-25">
+
+                    <!-- Configuración IA -->
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold small text-secondary mb-0">API KEY DE GROQ (Opcional)</label>
+                            <a href="#" class="text-decoration-none text-primary" data-bs-toggle="modal" data-bs-target="#groqHelpModal" title="¿Cómo obtener mi API Key?">
+                                <i class="bi bi-question-circle-fill fs-6"></i>
+                            </a>
+                        </div>
+                        <input type="password" id="apiKeyInput" class="form-control form-control-sm shadow-sm" placeholder="gsk_...">
+                        <div class="form-text small mt-2">Habilita la síntesis avanzada y la optimización de código DAX. Si se deja en blanco, utiliza el archivo .env o el modelo base determinista.</div>
+                    </div>
+                </div>
+
+                <!-- Criterios Verificados (Informativo) -->
+                <div class="card card-custom p-4 bg-light border-0">
+                    <h6 class="fw-bold mb-3 text-secondary"><i class="bi bi-list-check me-2"></i> Checkpoints</h6>
+                    <ul class="list-unstyled small text-muted mb-0" style="line-height: 1.8;">
+                        <li><i class="bi bi-check2-circle text-success me-2"></i><strong>Memoria:</strong> Fixed Decimal vs Float.</li>
+                        <li><i class="bi bi-check2-circle text-success me-2"></i><strong>UI/UX:</strong> Ocultar SK/Claves, Nomenclatura.</li>
+                        <li><i class="bi bi-check2-circle text-success me-2"></i><strong>Rendimiento:</strong> Auto Date/Time apagado.</li>
+                        <li><i class="bi bi-check2-circle text-success me-2"></i><strong>Relaciones:</strong> Sin filtros bidireccionales.</li>
+                        <li><i class="bi bi-check2-circle text-success me-2"></i><strong>DAX:</strong> Antipatrones (IFERROR, FILTER ALL).</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Resultados -->
+            <div class="col-lg-8">
+                
+                <!-- Spinner -->
+                <div id="loadingBox" class="card card-custom p-5 text-center d-none" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
+                    <div>
+                        <div class="spinner-border text-warning mb-3" style="width: 3.5rem; height: 3.5rem; border-width: 0.25em;" role="status"></div>
+                        <h4 class="fw-bold text-dark" id="loadingTitle">Analizando Modelo...</h4>
+                        <p class="text-muted">Desempaquetando TMDL, ejecutando validaciones y conectando con base de conocimiento.</p>
+                    </div>
+                </div>
+
+                <!-- Panel Inicial -->
+                <div id="welcomeBox" class="card card-custom p-5 text-center" style="min-height: 400px; display: flex; align-items: center; justify-content: center;">
+                    <div>
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/c/cf/New_Power_BI_Logo.svg" alt="Power BI" width="80" class="mb-4 opacity-75">
+                        <h3 class="fw-bold text-dark">Sube tu proyecto .pbip</h3>
+                        <p class="text-muted mx-auto" style="max-width: 400px;">Comprime la carpeta de tu proyecto en un archivo .zip y utiliza los botones del panel izquierdo para auditarlo u optimizar su código DAX.</p>
+                    </div>
+                </div>
+
+                <!-- Panel Resultados de Auditoría -->
+                <div id="resultsBox" class="d-none">
+                    
+                    <!-- Dashboard Visual Top -->
+                    <div class="row g-4 mb-4">
+                        <!-- Gauge Card -->
+                        <div class="col-md-5">
+                            <div class="card card-custom p-4 h-100 text-center d-flex flex-column justify-content-center">
+                                <h6 class="fw-bold text-muted mb-4">PUNTUACIÓN GLOBAL</h6>
+                                <div class="gauge-container">
+                                    <svg viewBox="0 0 100 55" class="gauge-svg">
+                                        <!-- No se usa transform scale(-1, 1) sino que dibujamos de izq a der directamente -->
+                                        <path class="gauge-bg" d="M 10 45 A 40 40 0 0 1 90 45" />
+                                        <path id="gaugePath" class="gauge-val" d="M 10 45 A 40 40 0 0 1 90 45" />
+                                    </svg>
+                                    <div class="gauge-text-container" style="bottom: 15%;">
+                                        <div class="gauge-score" id="scoreValTxt">0</div>
+                                        <div class="gauge-level mt-1" id="scoreLevelTxt">Evaluando</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Radar Chart Card -->
+                        <div class="col-md-7">
+                            <div class="card card-custom p-3 h-100">
+                                <canvas id="radarChart" style="max-height: 350px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resumen Ejecutivo & Exportar -->
+                    <div class="card card-custom p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold text-dark mb-0"><i class="bi bi-card-text me-2"></i> Diagnóstico Ejecutivo</h5>
+                            <button class="btn btn-sm btn-outline-success fw-semibold" id="btnExportExcel">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </button>
+                        </div>
+                        <p id="executiveSummary" class="text-secondary mb-3" style="font-size: 0.95rem; line-height: 1.6;">...</p>
+                        
+                        <!-- Badges de Severidad -->
+                        <div class="d-flex gap-2 flex-wrap bg-light p-3 rounded-3 border">
+                            <span class="badge badge-severity-Crítica px-3 py-2 rounded-pill shadow-sm"><span id="countCrit">0</span> Críticos</span>
+                            <span class="badge badge-severity-Alta px-3 py-2 rounded-pill shadow-sm"><span id="countHigh">0</span> Altos</span>
+                            <span class="badge badge-severity-Media px-3 py-2 rounded-pill shadow-sm"><span id="countMed">0</span> Medios</span>
+                            <span class="badge badge-severity-Baja px-3 py-2 rounded-pill shadow-sm"><span id="countLow">0</span> Bajos</span>
+                        </div>
+                    </div>
+
+                    <!-- Pestañas (Acordeón de Hallazgos y Plan) -->
+                    <div class="card card-custom p-4">
+                        <ul class="nav nav-tabs mb-4 border-bottom-0" id="pills-tab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active fw-bold text-dark border-0 border-bottom border-warning border-3 bg-transparent" id="tab-findings-btn" data-bs-toggle="pill" data-bs-target="#tab-findings" type="button" role="tab">
+                                    <i class="bi bi-search me-1"></i> Hallazgos Técnicos
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link fw-semibold text-secondary border-0 bg-transparent" id="tab-plan-btn" data-bs-toggle="pill" data-bs-target="#tab-plan" type="button" role="tab">
+                                    <i class="bi bi-calendar2-check me-1"></i> Plan de Acción
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="pills-tabContent">
+                            
+                            <!-- Tab: Hallazgos (Acordeón) -->
+                            <div class="tab-pane fade show active" id="tab-findings" role="tabpanel">
+                                <div class="alert alert-secondary border-warning border-start border-4 d-flex align-items-center mb-4" role="alert" style="background-color: #fff8e6;">
+                                    <i class="bi bi-exclamation-triangle-fill text-warning me-3 fs-4"></i>
+                                    <div class="small text-dark">
+                                        <strong>Aviso sobre Elementos Huérfanos:</strong> La detección de columnas y medidas sin uso analiza las dependencias estáticas locales (DAX y gráficos del PBIP actual). 
+                                        No detecta si un campo se usa en <em>Excels externos</em>, <em>roles de seguridad (RLS)</em> o <em>reportes satélite conectados (Live Connection)</em>. Valida el impacto externo antes de eliminar campos físicos.
+                                    </div>
+                                </div>
+                                <div id="findingsAccordionContainer">
+                                    <!-- Inyectado por JS -->
+                                </div>
+                            </div>
+
+                            <!-- Tab: Plan de Acción -->
+                            <div class="tab-pane fade" id="tab-plan" role="tabpanel">
+                                <div class="table-responsive rounded border">
+                                    <table class="table table-hover align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width: 80px;" class="text-center">Fase</th>
+                                                <th style="width: 110px;">Urgencia</th>
+                                                <th>Acción Estratégica</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="actionPlanBody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Panel DAX Optimizer -->
+                <div id="daxResultsBox" class="d-none">
+                    <div class="card card-custom p-4 mb-4">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-3 mb-4">
+                            <h4 class="fw-bold text-dark mb-0">
+                                <i class="bi bi-magic text-warning me-2"></i> IA Refactorización DAX
+                            </h4>
+                            <span class="badge bg-warning text-dark px-3 py-2 shadow-sm rounded-pill border" id="daxOptimizeCount">0 Optimizadas</span>
+                        </div>
+                        <p class="text-secondary mb-4">La Inteligencia Artificial ha aplicado el estándar de oro de SQLBI (uso intensivo de KEEPFILTERS, prevención de Transition Context y divisiones seguras) sobre las fórmulas más problemáticas de tu modelo.</p>
+                        
+                        <div id="daxOptimizationsContainer">
+                            <!-- Inyectado por JS -->
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ayuda Groq API -->
+    <div class="modal fade" id="groqHelpModal" tabindex="-1" aria-labelledby="groqHelpModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white border-bottom-0">
+                    <h5 class="modal-title fw-bold" id="groqHelpModalLabel"><i class="bi bi-key-fill text-warning me-2"></i>Cómo obtener tu API Key de Groq</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="mb-4 bg-white p-3 rounded shadow-sm border border-primary border-opacity-25">
+                        <h6 class="fw-bold text-dark mb-2"><i class="bi bi-stars text-primary me-2"></i>¿Para qué sirve esta clave?</h6>
+                        <p class="small text-dark mb-2">El análisis estático base (gráfico de salud, elementos huérfanos, buenas prácticas) funciona <strong>sin necesidad de clave</strong>. Añadirla desbloquea la Inteligencia Artificial avanzada:</p>
+                        <ul class="small text-dark mb-0 ps-3">
+                            <li class="mb-1"><strong>Optimizador DAX:</strong> La IA reescribe automáticamente tus métricas ineficientes o mal estructuradas.</li>
+                            <li><strong>Documentación Inteligente:</strong> Redacta en lenguaje natural el Resumen Ejecutivo del archivo Word (.docx).</li>
+                        </ul>
+                    </div>
+
+                    <p class="mb-3 text-dark fw-bold">Groq ofrece uno de los motores de IA más rápidos del mundo (100% gratuito). Sigue estos pasos para obtener tu clave:</p>
+                    
+                    <ol class="list-group list-group-numbered mb-4 shadow-sm">
+                        <li class="list-group-item d-flex justify-content-between align-items-start border-0 border-bottom">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Crear una cuenta</div>
+                                Entra en <a href="https://console.groq.com" target="_blank" class="fw-semibold">console.groq.com</a> y regístrate.
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start border-0 border-bottom">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Ir a API Keys</div>
+                                En el menú lateral izquierdo, haz clic en <strong>API Keys</strong>.
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start border-0 border-bottom">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Generar clave secreta</div>
+                                Pulsa <strong>Create API Key</strong>. Copia la cadena (empieza por <code>gsk_...</code>).
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start border-0">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Pegarla en la herramienta</div>
+                                Pega la clave en el recuadro "API KEY DE GROQ" de esta página para desbloquear el Refactorizador Avanzado.
+                            </div>
+                        </li>
+                    </ol>
+                    <div class="alert alert-info py-2 mb-0 small border-info border-start border-4">
+                        <i class="bi bi-info-circle-fill me-2"></i> No guardamos tu clave. Solo se envía directamente a la IA para procesar tu auditoría.
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 bg-light pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Entendido</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lógica JS -->
+    <script>
+        // DOM Elements
+        const welcomeBox = document.getElementById('welcomeBox');
+        const loadingBox = document.getElementById('loadingBox');
+        const resultsBox = document.getElementById('resultsBox');
+        const daxResultsBox = document.getElementById('daxResultsBox');
+        const loadingTitle = document.getElementById('loadingTitle');
+        let radarChartInstance = null;
+        let currentReport = null;
+
+        // Health Check
+        fetch('/health')
+            .then(r => r.json())
+            .then(() => {
+                const badge = document.getElementById('serviceStatus');
+                badge.innerHTML = `<i class="bi bi-circle-fill text-success small me-1"></i> Backend Online`;
+                badge.className = "badge bg-light text-success border";
+            })
+            .catch(() => {
+                const badge = document.getElementById('serviceStatus');
+                badge.innerHTML = `<i class="bi bi-circle-fill text-danger small me-1"></i> Offline`;
+                badge.className = "badge bg-light text-danger border";
+            });
+
+        // Toggle Loading
+        function showLoading(show, message = "Procesando...") {
+            if (show) {
+                loadingTitle.innerText = message;
+                loadingBox.classList.remove('d-none');
+                welcomeBox.classList.add('d-none');
+                resultsBox.classList.add('d-none');
+                daxResultsBox.classList.add('d-none');
+            } else {
+                loadingBox.classList.add('d-none');
+            }
+        }
+
+        // --- 1. AUDITORÍA CLÁSICA ---
+        document.getElementById('btnUploadZip').addEventListener('click', async () => {
+            const fileInput = document.getElementById('zipFileInput');
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (!fileInput.files.length) return alert("Selecciona un archivo .zip del proyecto .pbip.");
+            
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            if (apiKey) formData.append("api_key", apiKey);
+
+            showLoading(true, "Auditando Modelo...");
+            try {
+                const res = await fetch('/api/v1/audit/upload-zip', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error((await res.json()).detail || "Error interno");
+                const data = await res.json();
+                renderReport(data.audit_report);
+            } catch (err) {
+                alert("Error: " + err.message);
+                welcomeBox.classList.remove('d-none');
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        // Renderizado del Reporte
+        function renderReport(report) {
+            currentReport = report;
+            welcomeBox.classList.add('d-none');
+            resultsBox.classList.remove('d-none');
+
+            // 1. Gauge Animation
+            const score = report.score || 0;
+            const gaugePath = document.getElementById('gaugePath');
+            const scoreTxt = document.getElementById('scoreValTxt');
+            const levelTxt = document.getElementById('scoreLevelTxt');
+            
+            const arcLength = 125.6; // pi * 40
+            gaugePath.style.strokeDasharray = arcLength;
+            
+            // stroke-dashoffset: 125.6 = empty, 0 = full
+            const fillAmount = (score / 100) * arcLength; 
+            gaugePath.style.strokeDashoffset = arcLength - fillAmount;
+
+            // Animate number
+            let currVal = 0;
+            const inv = setInterval(() => {
+                currVal += 2;
+                if(currVal >= score) {
+                    currVal = score;
+                    clearInterval(inv);
+                }
+                scoreTxt.innerText = currVal;
+            }, 20);
+            
+            levelTxt.innerText = report.level || "Completado";
+            
+            // Color based on score
+            let color = 'var(--sev-crit)';
+            if(score >= 80) color = '#107C10'; // Verde
+            else if(score >= 60) color = 'var(--pbi-yellow)';
+            else if(score >= 40) color = 'var(--sev-high)';
+            gaugePath.style.stroke = color;
+            scoreTxt.style.color = color;
+
+            // 2. Ejecutivos y Contadores
+            document.getElementById('executiveSummary').innerText = report.executive_summary || "Análisis completado.";
+            const fs = report.findings_summary || {};
+            document.getElementById('countCrit').innerText = fs.critical_count || 0;
+            document.getElementById('countHigh').innerText = fs.high_count || 0;
+            document.getElementById('countMed').innerText = fs.medium_count || 0;
+            document.getElementById('countLow').innerText = fs.low_count || 0;
+
+            // 3. Radar Chart (Mapa de Salud por Categoría 0-10)
+            const categories = [
+                "Esquema Estrella", "Optimización de Memoria (VertiPaq)", 
+                "Modelado de Relaciones", "Modelo y Fechas", 
+                "Nomenclatura y Experiencia", "Visibilidad de Campos", 
+                "Visibilidad de Campos y Medidas Explícitas", "DAX", "Limpieza de Modelo (Elementos Huérfanos)", "General"
+            ];
+            
+            const catScores = {};
+            const catIssuesCount = {};
+            // Inicializar todas a 10 (Perfecto) y 0 problemas
+            categories.forEach(c => { catScores[c] = 10; catIssuesCount[c] = 0; });
+            
+            const items = report.evaluated_findings || [];
+            
+            items.forEach(f => {
+                const cat = f.category || 'General';
+                // Si la categoría viene del backend pero no está en nuestro radar exacto, la agrupamos en General
+                const finalCat = catScores[cat] !== undefined ? cat : 'General';
+                
+                catIssuesCount[finalCat]++;
+                let penalty = 1; // Default Medio/Bajo
+                if (f.severity === 'Crítica') penalty = 3;
+                if (f.severity === 'Alta') penalty = 2;
+                
+                catScores[finalCat] = Math.max(0, catScores[finalCat] - penalty);
+            });
+
+            // Diccionario de explicaciones para el Tooltip
+            const catDescriptions = {
+                "Esquema Estrella": ["Evalúa que el modelo siga el paradigma", "dimensional (Hechos y Dimensiones)."],
+                "Optimización de Memoria (VertiPaq)": ["Verifica el uso de tipos de datos eficientes", "(ej. Fixed Decimal) para maximizar compresión."],
+                "Modelado de Relaciones": ["Revisa direcciones de filtros cruzados y", "cardinalidad (evita M:M o filtros bidireccionales)."],
+                "Modelo y Fechas": ["Valida la existencia de una tabla Date", "explícita y apaga Auto Date/Time."],
+                "Nomenclatura y Experiencia": ["Comprueba nombres limpios y de negocio", "sin prefijos técnicos (tbl_, dim_)."],
+                "Visibilidad de Campos": ["Garantiza que claves primarias/foráneas y", "campos técnicos estén ocultos al usuario."],
+                "Visibilidad de Campos y Medidas Explícitas": ["Obliga a crear medidas DAX explícitas", "en vez de usar sumas implícitas."],
+                "DAX": ["Detecta antipatrones de código, funciones", "lentas y fallos de transición de contexto."],
+                "Limpieza de Modelo (Elementos Huérfanos)": ["Detecta columnas y métricas declaradas", "que no se usan en DAX ni en visuales locales."],
+                "General": ["Reglas generales de buenas prácticas", "en el desarrollo del modelo."]
+            };
+
+            if (radarChartInstance) radarChartInstance.destroy();
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            
+            // Función para dividir nombres muy largos en dos líneas (Array)
+            const formatLabel = (name) => {
+                if (name === "Visibilidad de Campos y Medidas Explícitas") return ["Visibilidad de Campos", "y Medidas Explícitas"];
+                if (name === "Optimización de Memoria (VertiPaq)") return ["Optimización de Memoria", "(VertiPaq)"];
+                if (name === "Nomenclatura y Experiencia") return ["Nomenclatura y", "Experiencia"];
+                if (name === "Limpieza de Modelo (Elementos Huérfanos)") return ["Limpieza de Modelo", "(Elementos Huérfanos)"];
+                return name;
+            };
+
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: categories.map(formatLabel),
+                    datasets: [{
+                        label: 'Índice de Salud',
+                        data: categories.map(c => catScores[c]),
+                        backgroundColor: 'rgba(242, 200, 17, 0.25)',
+                        borderColor: 'rgba(242, 200, 17, 1)',
+                        pointBackgroundColor: '#252423',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: '#252423'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: {
+                        padding: 15 // Espacio extra para que no se corten los textos
+                    },
+                    scales: { 
+                        r: { 
+                            min: 0,
+                            max: 10,
+                            ticks: { display: false }, 
+                            beginAtZero: true,
+                            pointLabels: {
+                                font: { size: 11, weight: '600', family: "'Segoe UI', Roboto, sans-serif" },
+                                color: '#444'
+                            }
+                        } 
+                    },
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(37, 36, 35, 0.98)',
+                            titleFont: { size: 14, weight: 'bold' },
+                            bodyFont: { size: 13 },
+                            padding: 16, 
+                            bodySpacing: 6,
+                            displayColors: false, // Quita el cuadradito de color para alinear perfecto el texto
+                            titleAlign: 'left',
+                            bodyAlign: 'left',
+                            callbacks: {
+                                // Título del Tooltip (recuperamos el nombre original)
+                                title: function(context) {
+                                    return categories[context[0].dataIndex];
+                                },
+                                // Línea principal (Nota)
+                                label: function(context) {
+                                    const catName = categories[context.dataIndex];
+                                    const issues = catIssuesCount[catName];
+                                    const emoji = context.raw === 10 ? '✅' : '⚠️';
+                                    return `Índice de Salud: ${context.raw}/10 ${emoji} (${issues} hallazgos)`;
+                                },
+                                // Explicación debajo
+                                afterLabel: function(context) {
+                                    const catName = categories[context.dataIndex];
+                                    const desc = catDescriptions[catName];
+                                    if (desc) {
+                                        return ['-------------------------------------------', '¿Qué evalúa la IA?', ...desc];
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 4. Renderizar Acordeón de Hallazgos Agrupado
+            const accContainer = document.getElementById('findingsAccordionContainer');
+            if (items.length === 0) {
+                accContainer.innerHTML = '<div class="alert alert-success">No se encontraron problemas. ¡El modelo es perfecto!</div>';
+            } else {
+                // Paso 1: Agrupar por Categoría
+                const groupedFindings = {};
+                items.forEach(item => {
+                    const cat = item.category || 'General';
+                    if (!groupedFindings[cat]) groupedFindings[cat] = [];
+                    groupedFindings[cat].push(item);
+                });
+
+                let html = '<div class="accordion shadow-sm" id="findingsAccordion">';
+                let catIdx = 0;
+                
+                for (const [catName, catItems] of Object.entries(groupedFindings)) {
+                    const idCol = `collapseCat${catIdx}`;
+                    
+                    // Contadores de severidad para la categoría
+                    let crit = 0, high = 0, med = 0, low = 0;
+                    catItems.forEach(i => {
+                        if (i.severity === 'Crítica') crit++;
+                        else if (i.severity === 'Alta') high++;
+                        else if (i.severity === 'Media') med++;
+                        else low++;
+                    });
+                    
+                    let badgesHtml = '';
+                    if (crit > 0) badgesHtml += `<span class="badge bg-danger me-1" title="Críticas">${crit}</span>`;
+                    if (high > 0) badgesHtml += `<span class="badge bg-warning text-dark me-1" title="Altas">${high}</span>`;
+                    if (med > 0) badgesHtml += `<span class="badge bg-secondary me-1" title="Medias">${med}</span>`;
+                    if (low > 0) badgesHtml += `<span class="badge bg-info text-dark me-1" title="Bajas">${low}</span>`;
+
+                    html += `
+                    <div class="accordion-item border-bottom">
+                        <h2 class="accordion-header" id="headingCat${catIdx}">
+                            <button class="accordion-button collapsed fw-bold text-dark fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#${idCol}">
+                                <div class="d-flex justify-content-between align-items-center w-100 pe-3">
+                                    <span><i class="bi bi-folder2-open text-warning me-2"></i> ${catName}</span>
+                                    <div>${badgesHtml}</div>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="${idCol}" class="accordion-collapse collapse" data-bs-parent="#findingsAccordion">
+                            <div class="accordion-body bg-light p-4">
+                    `;
+                    
+                    // Paso 2: Agrupar por Regla dentro de la Categoría
+                    const groupedByRule = {};
+                    catItems.forEach(i => {
+                        const rule = i.rule || 'Observación General';
+                        if (!groupedByRule[rule]) groupedByRule[rule] = [];
+                        groupedByRule[rule].push(i);
+                    });
+
+                    for (const [ruleName, ruleItems] of Object.entries(groupedByRule)) {
+                        const firstItem = ruleItems[0];
+                        html += `
+                                <div class="card border-0 shadow-sm mb-4">
+                                    <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
+                                        <h6 class="fw-bold text-dark mb-1">
+                                            <span class="badge badge-severity-${firstItem.severity} me-2" style="width: 70px;">${firstItem.severity}</span>
+                                            ${ruleName}
+                                        </h6>
+                                        <p class="small text-muted mb-2">${firstItem.detail || firstItem.technical_rationale || ''}</p>
+                                    </div>
+                                    <div class="card-body pt-2 pb-3">
+                                        ${firstItem.recommendation ? `<div class="small text-success fw-semibold mb-2"><i class="bi bi-wrench me-1"></i> Sugerencia: <span class="text-dark fw-normal">${firstItem.recommendation}</span></div>` : ''}
+                                        
+                                        <div class="small fw-bold text-muted mb-1 mt-3">Orígenes afectados (${ruleItems.length}):</div>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            ${ruleItems.map(i => `<code class="text-primary bg-primary bg-opacity-10 px-2 py-1 rounded" style="font-size: 0.8rem;">${i.target}</code>`).join('')}
+                                        </div>
+                                        ${firstItem.remediation_code ? `
+                                        <div class="mt-3">
+                                            <span class="small fw-bold text-muted">Código Sugerido:</span>
+                                            <pre class="mt-1 mb-0 shadow-sm border border-secondary border-opacity-25"><code>${firstItem.remediation_code}</code></pre>
+                                        </div>` : ''}
+                                    </div>
+                                </div>
+                        `;
+                    }
+                    
+                    html += `
+                            </div>
+                        </div>
+                    </div>`;
+                    catIdx++;
+                }
+                html += '</div>';
+                accContainer.innerHTML = html;
+            }
+
+            // 5. Renderizar Plan de Acción
+            const actionPlanBody = document.getElementById('actionPlanBody');
+            actionPlanBody.innerHTML = "";
+            (report.action_plan || []).forEach((p, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="fw-bold text-center text-muted">Fase ${idx+1}</td>
+                    <td><span class="badge ${p.priority === 'Inmediata' ? 'bg-danger' : 'bg-warning text-dark'} w-100">${p.priority}</span></td>
+                    <td class="small fw-semibold text-dark">${p.action} <br><span class="text-muted fw-normal">Afecta a: <code>${p.target}</code></span></td>
+                `;
+                actionPlanBody.appendChild(tr);
+            });
+        }
+
+        // Exportar a Excel
+        document.getElementById('btnExportExcel').addEventListener('click', async (e) => {
+            if (!currentReport) return;
+            const btn = e.target.closest('button');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch('/api/v1/audit/export-excel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentReport)
+                });
+                if (!res.ok) throw new Error("Error al exportar");
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = "Auditoria_PBIP.xlsx";
+                document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url);
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            }
+        });
+
+        // --- 2. GENERAR DOCS DOCX ---
+        document.getElementById('btnGenerateDocs').addEventListener('click', async () => {
+            const fileInput = document.getElementById('zipFileInput');
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (!fileInput.files.length) return alert("Selecciona un archivo .zip.");
+            
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            if (apiKey) formData.append("api_key", apiKey);
+
+            showLoading(true, "Redactando Documentación Word...");
+            try {
+                const res = await fetch('/api/v1/docs/upload-zip', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error((await res.json()).detail);
+                
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = "Documentacion_Tecnica.docx";
+                document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url);
+                alert("Documentación descargada exitosamente.");
+            } catch (err) {
+                alert("Error: " + err.message);
+            } finally {
+                showLoading(false);
+                if (currentReport) { resultsBox.classList.remove('d-none'); } 
+                else { welcomeBox.classList.remove('d-none'); }
+            }
+        });
+
+        // --- 3. OPTIMIZADOR DAX IA ---
+        document.getElementById('btnOptimizeDax').addEventListener('click', async () => {
+            const fileInput = document.getElementById('zipFileInput');
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (!fileInput.files.length) return alert("Selecciona un archivo .zip para optimizar.");
+            
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+            if (apiKey) formData.append("api_key", apiKey);
+
+            showLoading(true, "Analizando DAX con Inteligencia Artificial...");
+            try {
+                const res = await fetch('/api/v1/dax/optimize', { method: 'POST', body: formData });
+                if (!res.ok) throw new Error((await res.json()).detail);
+                renderDaxResults(await res.json());
+            } catch (err) {
+                alert("Error: " + err.message);
+                showLoading(false);
+                welcomeBox.classList.remove('d-none');
+            }
+        });
+
+        function renderDaxResults(data) {
+            showLoading(false);
+            welcomeBox.classList.add('d-none');
+            resultsBox.classList.add('d-none');
+            daxResultsBox.classList.remove('d-none');
+            
+            const container = document.getElementById('daxOptimizationsContainer');
+            const opts = data.optimizations || [];
+            document.getElementById('daxOptimizeCount').innerText = `${opts.length} Métricas Refactorizadas`;
+            
+            if (opts.length === 0) {
+                container.innerHTML = `<div class="alert alert-success p-4 fw-semibold border border-success border-opacity-25 shadow-sm"><i class="bi bi-emoji-sunglasses text-success me-2 fs-5"></i>${data.message}</div>`;
+                return;
+            }
+            
+            let html = '';
+            opts.forEach(opt => {
+                html += `
+                    <div class="card mb-4 border border-warning shadow-sm overflow-hidden" style="border-radius: 10px;">
+                        <div class="card-header bg-warning bg-opacity-10 fw-bold text-dark border-bottom border-warning border-opacity-25 py-3">
+                            <i class="bi bi-lightning-fill text-warning me-1"></i> ${opt.measure_name || 'Desconocida'}
+                        </div>
+                        <div class="card-body bg-white p-4">
+                            <div class="d-flex align-items-start mb-4 bg-light p-3 rounded border">
+                                <i class="bi bi-robot text-primary fs-4 me-3"></i>
+                                <div>
+                                    <h6 class="fw-bold mb-1">Decisión Arquitectónica (IA)</h6>
+                                    <p class="small text-muted mb-0">${opt.explanation}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="row g-4">
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2"><i class="bi bi-x-circle me-1"></i>DAX Original</span>
+                                    </div>
+                                    <pre class="m-0 shadow-inner" style="background-color: #252423; border-top: 3px solid #D13438;"><code>${opt.original_dax}</code></pre>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success px-3 py-2"><i class="bi bi-check-circle me-1"></i>DAX Optimizado</span>
+                                    </div>
+                                    <pre class="m-0 shadow-inner" style="background-color: #252423; border-top: 3px solid #107C10;"><code>${opt.optimized_dax}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            });
+            container.innerHTML = html;
+        }
+        
+        // Estilos extra para las tabs activas
+        document.querySelectorAll('.nav-link').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                document.querySelectorAll('.nav-link').forEach(t => {
+                    t.classList.remove('border-warning', 'border-3', 'border-bottom', 'text-dark', 'fw-bold');
+                    t.classList.add('text-secondary');
+                });
+                e.target.classList.remove('text-secondary');
+                e.target.classList.add('border-warning', 'border-3', 'border-bottom', 'text-dark', 'fw-bold');
+            });
+        });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
