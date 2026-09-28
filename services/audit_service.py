@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from groq import Groq
 from rag.vector_store import PowerBIRAG
 
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "llama3-70b-8192"
 
 class AuditService:
     def __init__(self, rag: PowerBIRAG, openai_api_key: Optional[str] = None):

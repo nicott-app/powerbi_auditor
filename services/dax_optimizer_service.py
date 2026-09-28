@@ -5,7 +5,7 @@ import sys
 from groq import Groq
 from core.prompts import DAX_OPTIMIZER_PROMPT
 
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "llama3-70b-8192"
 
 def _sanitize_text(text):
     if not isinstance(text, str):

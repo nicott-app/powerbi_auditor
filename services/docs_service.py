@@ -12,7 +12,7 @@ from groq import Groq
 
 from core.prompts import DOCS_PROMPT
 
-GROQ_MODEL = "openai/gpt-oss-120b"
+GROQ_MODEL = "llama3-70b-8192"
 
 # Forzar stdout a utf-8 para evitar crashes con charmap en Windows
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
