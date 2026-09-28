@@ -10,6 +10,20 @@ def run_static_checks(model_data: Dict[str, Any], report_data: Dict[str, Any] = 
     tables = model_data.get("tables", [])
     relationships = model_data.get("relationships", [])
 
+    # -------------------------------------------------------------
+    # 0. DETECCIÓN DE LIVE CONNECTION (THIN REPORT)
+    # -------------------------------------------------------------
+    if model_data.get("is_live_connection"):
+        findings.append({
+            "category": "General",
+            "severity": "Informativo",
+            "rule": "Reporte de Conexión Directa (Live Connection)",
+            "target": "Modelo Completo",
+            "detail": "El archivo subido es un reporte desacoplado ('Thin Report'). No contiene tablas, relaciones ni medidas físicas en su código.",
+            "impact": "Las métricas de rendimiento del modelo (VertiPaq, Esquema Estrella) no pueden ser evaluadas porque el motor está en Power BI Service o SSAS.",
+            "recommendation": "Para auditar el modelo semántico, suba el archivo .pbip o .zip correspondiente al Dataset original."
+        })
+        
     # Mapa rápido de columnas por tabla para comprobación de tipos en relaciones
     column_type_map = {}
     for t in tables:

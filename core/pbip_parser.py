@@ -15,7 +15,7 @@ class PBIPParser:
         self.semantic_dir = self._locate_semantic_model_dir()
         self.report_dir = self._locate_report_dir()
 
-    def _locate_semantic_model_dir(self) -> Path:
+    def _locate_semantic_model_dir(self) -> Optional[Path]:
         # Busca carpeta .SemanticModel o .Dataset
         if self.root.name.endswith(".SemanticModel") or self.root.name.endswith(".Dataset"):
             return self.root
@@ -29,7 +29,7 @@ class PBIPParser:
         # Si contiene definition/ o model.bim directamente
         if (self.root / "definition").exists() or (self.root / "model.bim").exists():
             return self.root
-        raise FileNotFoundError(f"No se encontró carpeta de modelo semántico (.SemanticModel o .Dataset) en {self.root}")
+        return None
 
     def _locate_report_dir(self) -> Optional[Path]:
         for p in self.root.glob("*"):
@@ -42,7 +42,12 @@ class PBIPParser:
 
     def parse_all(self) -> Dict[str, Any]:
         """Extrae el modelo semántico completo y estadísticas de reporte si existen."""
-        model_data = self.parse_model()
+        if self.semantic_dir:
+            model_data = self.parse_model()
+            model_data["is_live_connection"] = False
+        else:
+            model_data = {"tables": [], "relationships": [], "is_live_connection": True}
+            
         report_data = self.parse_report()
         return {
             "model": model_data,
