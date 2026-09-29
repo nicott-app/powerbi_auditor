@@ -106,12 +106,12 @@ def analyze_and_optimize_dax(model_data: dict, api_key: str = None) -> dict:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,
-          max_tokens=2000
-      )
-      raw_res = response.choices[0].message.content.strip()
-      import re as _re
-      m = _re.search(r"\{.*\}", raw_res, _re.DOTALL)
-      result = json.loads(m.group() if m else raw_res)
+            max_tokens=2000
+        )
+        raw_res = response.choices[0].message.content.strip()
+        import re as _re
+        m = _re.search(r"\{.*\}", raw_res, _re.DOTALL)
+        result = json.loads(m.group() if m else raw_res)
         result = _sanitize_dict(result)
         return {
             "status": "success",

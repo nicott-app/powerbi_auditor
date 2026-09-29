@@ -105,12 +105,12 @@ def generate_technical_docs(model_data: dict, report_data: dict, api_key: str = 
                     {"role": "system", "content": "You are a helpful AI that returns JSON only, no markdown."},
                     {"role": "user", "content": full_prompt}
                 ],
-                  temperature=0.3,
-                  max_tokens=2000
-              )
-              raw_docs = response.choices[0].message.content.strip()
-              m = re.search(r"{.*}", raw_docs, re.DOTALL)
-              doc_content = json.loads(m.group() if m else raw_docs)
+                temperature=0.3,
+                max_tokens=2000
+            )
+            raw_docs = response.choices[0].message.content.strip()
+            m = re.search(r"{.*}", raw_docs, re.DOTALL)
+            doc_content = json.loads(m.group() if m else raw_docs)
             # Sanitizar todos los textos del LLM para evitar charmap en Windows
             doc_content = _sanitize_dict(doc_content)
             print("[docs_service] Respuesta de Groq recibida correctamente.")
