@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from groq import Groq
 from rag.vector_store import PowerBIRAG
 
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 class AuditService:
     def __init__(self, rag: PowerBIRAG, openai_api_key: Optional[str] = None):
@@ -91,14 +91,21 @@ INSTRUCCIONES DE RESPUESTA:
 """
         response = self.ai_client.chat.completions.create(
             model=GROQ_MODEL,
-            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": "Eres un auditor técnico de Power BI de máxima reputación."},
+                {"role": "system", "content": "Eres un auditor técnico de Power BI de máxima reputación. Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin bloques de código."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2
+            temperature=0.2,
+            max_tokens=2000
         )
-        ai_response = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content.strip()
+        # Extraer JSON aunque el modelo añada texto o bloques markdown
+        import re as _re
+        json_match = _re.search(r'\{.*\}', raw_content, _re.DOTALL)
+        if json_match:
+            ai_response = json.loads(json_match.group())
+        else:
+            ai_response = json.loads(raw_content)
         
         # Inyectar el score determinista calculado matemáticamente
         severity_counts = {"Crítica": 0, "Alta": 0, "Media": 0, "Baja": 0}

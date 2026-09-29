@@ -5,7 +5,7 @@ import sys
 from groq import Groq
 from core.prompts import DAX_OPTIMIZER_PROMPT
 
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 def _sanitize_text(text):
     if not isinstance(text, str):
@@ -102,13 +102,16 @@ def analyze_and_optimize_dax(model_data: dict, api_key: str = None) -> dict:
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
-                {"role": "system", "content": "You are a helpful AI that returns JSON only."},
+                {"role": "system", "content": "You are a helpful AI that returns JSON only, no markdown, no code blocks."},
                 {"role": "user", "content": prompt}
             ],
-            response_format={"type": "json_object"},
-            temperature=0.2
-        )
-        result = json.loads(response.choices[0].message.content)
+            temperature=0.2,
+          max_tokens=2000
+      )
+      raw_res = response.choices[0].message.content.strip()
+      import re as _re
+      m = _re.search(r"\{.*\}", raw_res, _re.DOTALL)
+      result = json.loads(m.group() if m else raw_res)
         result = _sanitize_dict(result)
         return {
             "status": "success",

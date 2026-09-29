@@ -1,3 +1,4 @@
+import re
 import json
 import os
 import sys
@@ -12,7 +13,7 @@ from groq import Groq
 
 from core.prompts import DOCS_PROMPT
 
-GROQ_MODEL = "llama3-70b-8192"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 # Forzar stdout a utf-8 para evitar crashes con charmap en Windows
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
@@ -104,10 +105,12 @@ def generate_technical_docs(model_data: dict, report_data: dict, api_key: str = 
                     {"role": "system", "content": "You are a helpful AI that returns JSON only, no markdown."},
                     {"role": "user", "content": full_prompt}
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.3
-            )
-            doc_content = json.loads(response.choices[0].message.content)
+                  temperature=0.3,
+                  max_tokens=2000
+              )
+              raw_docs = response.choices[0].message.content.strip()
+              m = re.search(r"{.*}", raw_docs, re.DOTALL)
+              doc_content = json.loads(m.group() if m else raw_docs)
             # Sanitizar todos los textos del LLM para evitar charmap en Windows
             doc_content = _sanitize_dict(doc_content)
             print("[docs_service] Respuesta de Groq recibida correctamente.")
