@@ -114,10 +114,11 @@ INSTRUCCIONES DE RESPUESTA:
             if sev in severity_counts:
                 severity_counts[sev] += 1
                 
-        penalty_crit = severity_counts["Crítica"] * 20
-        penalty_alta = severity_counts["Alta"] * 10
-        penalty_media = min(severity_counts["Media"] * 3, 20)
-        penalty_baja = min(severity_counts["Baja"] * 1, 10)
+        # Sistema de penalización con topes para diferenciar modelos
+        penalty_crit = min(severity_counts.get("Crítica", 0) * 15, 75)
+        penalty_alta = min(severity_counts.get("Alta", 0) * 3, 45)
+        penalty_media = min(severity_counts.get("Media", 0) * 1, 15)
+        penalty_baja = min(severity_counts.get("Baja", 0) * 0.5, 10)
 
         score = 100 - (penalty_crit + penalty_alta + penalty_media + penalty_baja)
         score = max(10, min(100, score))
@@ -175,11 +176,11 @@ INSTRUCCIONES DE RESPUESTA:
                 })
                 step += 1
 
-        # Nuevo sistema de penalización equilibrado (Topes para fallos menores)
-        penalty_crit = severity_counts["Crítica"] * 20
-        penalty_alta = severity_counts["Alta"] * 10
-        penalty_media = min(severity_counts["Media"] * 3, 20)  # Máximo 20 puntos perdidos por fallos medios
-        penalty_baja = min(severity_counts["Baja"] * 1, 10)    # Máximo 10 puntos perdidos por fallos bajos
+        # Sistema de penalización con topes para diferenciar modelos
+        penalty_crit = min(severity_counts.get("Crítica", 0) * 15, 75)
+        penalty_alta = min(severity_counts.get("Alta", 0) * 3, 45)
+        penalty_media = min(severity_counts.get("Media", 0) * 1, 15)
+        penalty_baja = min(severity_counts.get("Baja", 0) * 0.5, 10)
 
         score = 100 - (penalty_crit + penalty_alta + penalty_media + penalty_baja)
         score = max(10, min(100, score))
