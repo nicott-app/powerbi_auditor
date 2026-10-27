@@ -182,6 +182,9 @@
                 <i class="bi bi-bar-chart-fill text-warning me-2"></i> Power BI Model Auditor AI
             </span>
             <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#historyModal" id="btnOpenHistory">
+                    <i class="bi bi-clock-history"></i> <span>Historial</span>
+                </button>
                 <span class="badge bg-secondary" id="serviceStatus"><i class="bi bi-cpu"></i> Conectando...</span>
                 <span class="badge bg-light text-dark border"><i class="bi bi-stars text-warning"></i> RAG Grounded</span>
             </div>
@@ -453,6 +456,52 @@
                 </div>
                 <div class="modal-footer border-top-0 bg-light pt-0">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Entendido</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Historial de Auditorías -->
+    <div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white border-bottom-0">
+                    <h5 class="modal-title fw-bold" id="historyModalLabel">
+                        <i class="bi bi-clock-history text-warning me-2"></i>Historial de Auditorías
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="text-muted small mb-0">Auditorías registradas en la base de datos local. Puedes recargar cualquier informe sin volver a subir el archivo.</p>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadAuditHistory()">
+                            <i class="bi bi-arrow-clockwise me-1"></i> Actualizar
+                        </button>
+                    </div>
+                    <div class="table-responsive bg-white rounded shadow-sm border">
+                        <table class="table table-hover align-middle mb-0" id="historyTable">
+                            <thead class="table-light small text-secondary">
+                                <tr>
+                                    <th>Fecha / Hora</th>
+                                    <th>Proyecto / Archivo</th>
+                                    <th class="text-center">Score</th>
+                                    <th class="text-center">Estado</th>
+                                    <th class="text-center">Hallazgos (C / A / M / B)</th>
+                                    <th class="text-end">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">
+                                        <i class="bi bi-hourglass-split me-2"></i> Cargando historial...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 bg-light pt-0">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                 </div>
             </div>
         </div>
@@ -932,17 +981,85 @@
             container.innerHTML = html;
         }
         
-        // Estilos extra para las tabs activas
-        document.querySelectorAll('.nav-link').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                document.querySelectorAll('.nav-link').forEach(t => {
-                    t.classList.remove('border-warning', 'border-3', 'border-bottom', 'text-dark', 'fw-bold');
-                    t.classList.add('text-secondary');
-                });
-                e.target.classList.remove('text-secondary');
-                e.target.classList.add('border-warning', 'border-3', 'border-bottom', 'text-dark', 'fw-bold');
-            });
-        });
+        // --- HISTORIAL DE AUDITORÍAS (SQLITE) ---
+        async function loadAuditHistory() {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-2"></i> Cargando historial...</td></tr>`;
+            try {
+                const res = await fetch('/api/v1/history');
+                if (!res.ok) throw new Error("Error al obtener historial");
+                const list = await res.json();
+                
+                if (!list || list.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-inbox me-2"></i> No hay auditorías registradas todavía. Realiza tu primera auditoría para verla aquí.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = list.map(item => {
+                    let badgeClass = "badge-severity-Crítica";
+                    if (item.score >= 80) badgeClass = "bg-success";
+                    else if (item.score >= 60) badgeClass = "badge-severity-Media";
+                    else if (item.score >= 40) badgeClass = "badge-severity-Alta";
+
+                    return `
+                        <tr>
+                            <td class="small text-nowrap"><i class="bi bi-calendar3 me-1 text-secondary"></i> ${item.created_at}</td>
+                            <td class="fw-bold text-dark"><i class="bi bi-file-earmark-zip me-1 text-warning"></i> ${item.project_name}</td>
+                            <td class="text-center"><span class="badge ${badgeClass} fs-6 px-2 py-1">${item.score}/100</span></td>
+                            <td class="text-center small fw-semibold text-secondary">${item.level}</td>
+                            <td class="text-center small">
+                                <span class="badge badge-severity-Crítica me-1" title="Críticas">${item.critical_count}</span>
+                                <span class="badge badge-severity-Alta me-1" title="Altas">${item.high_count}</span>
+                                <span class="badge badge-severity-Media me-1" title="Medias">${item.medium_count}</span>
+                                <span class="badge badge-severity-Baja" title="Bajas">${item.low_count}</span>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <button class="btn btn-sm btn-pbi-dark me-1" onclick="viewHistoricalAudit(${item.id})" title="Cargar reporte en pantalla">
+                                    <i class="bi bi-eye-fill me-1"></i> Ver
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoricalAudit(${item.id})" title="Eliminar del historial">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-2"></i> Error: ${e.message}</td></tr>`;
+            }
+        }
+
+        async function viewHistoricalAudit(id) {
+            showLoading(true, "Cargando auditoría guardada...");
+            try {
+                const res = await fetch(`/api/v1/history/${id}`);
+                if (!res.ok) throw new Error("No se pudo cargar la auditoría");
+                const data = await res.json();
+                
+                const modalEl = document.getElementById('historyModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+
+                renderReport(data.report);
+            } catch (e) {
+                alert("Error: " + e.message);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function deleteHistoricalAudit(id) {
+            if (!confirm("¿Deseas eliminar este registro del historial?")) return;
+            try {
+                const res = await fetch(`/api/v1/history/${id}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error("No se pudo eliminar");
+                await loadAuditHistory();
+            } catch (e) {
+                alert("Error al eliminar: " + e.message);
+            }
+        }
+
+        document.getElementById('historyModal')?.addEventListener('show.bs.modal', loadAuditHistory);
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

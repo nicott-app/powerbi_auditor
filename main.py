@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from core.pbip_parser import PBIPParser
 from core.static_rules import run_static_checks
+from core.db import save_audit, get_history, get_audit, delete_audit
 from rag.vector_store import PowerBIRAG
 from services.audit_service import AuditService
 
@@ -88,7 +89,10 @@ def audit_folder(req: FolderAuditRequest):
         audit_srv = AuditService(rag=rag_engine, openai_api_key=active_key)
         report = audit_srv.execute_audit(model_data, report_data, static_findings)
 
+        audit_id = save_audit(target_path.stem, report)
+
         return {
+            "audit_id": audit_id,
             "project_name": target_path.stem,
             "audit_report": report
         }
@@ -123,7 +127,10 @@ async def audit_upload_zip(file: UploadFile = File(...), api_key: Optional[str] 
         audit_srv = AuditService(rag=rag_engine, openai_api_key=active_key)
         report = audit_srv.execute_audit(model_data, report_data, static_findings)
 
+        audit_id = save_audit(file.filename, report)
+
         return {
+            "audit_id": audit_id,
             "project_name": file.filename,
             "audit_report": report
         }
@@ -184,13 +191,10 @@ async def optimize_dax_endpoint(file: UploadFile = File(...), api_key: str = For
     if not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un .zip del PBIP")
 
-    temp_dir = Path("temp_dax_pbip")
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(prefix="pbi_dax_")
 
     try:
-        zip_path = temp_dir / file.filename
+        zip_path = Path(temp_dir) / file.filename
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -208,6 +212,27 @@ async def optimize_dax_endpoint(file: UploadFile = File(...), api_key: str = For
         raise HTTPException(status_code=500, detail=f"Error en la optimización DAX: {str(e)}")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+@app.get("/api/v1/history")
+def list_audit_history(limit: int = 50):
+    """Retorna el listado cronológico de auditorías pasadas."""
+    return get_history(limit=limit)
+
+@app.get("/api/v1/history/{audit_id}")
+def get_audit_history_item(audit_id: int):
+    """Obtiene el reporte completo de una auditoría guardada por su ID."""
+    record = get_audit(audit_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Auditoría no encontrada")
+    return record
+
+@app.delete("/api/v1/history/{audit_id}")
+def delete_audit_history_item(audit_id: int):
+    """Elimina un registro del historial."""
+    success = delete_audit(audit_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Auditoría no encontrada")
+    return {"status": "deleted", "id": audit_id}
 
 from services.excel_service import generate_audit_excel
 
