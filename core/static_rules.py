@@ -112,40 +112,45 @@ def run_static_checks(model_data: Dict[str, Any], report_data: Dict[str, Any] = 
         for c in t.get("columns", []):
             cname = c["name"]
             cname_lower = cname.lower()
-            is_key = cname_lower.endswith("key") or cname_lower.endswith("id") or cname_lower.startswith("id_") or cname_lower == "id"
-            if is_key and not c.get("isHidden"):
-                findings.append({
-                    "category": "Visibilidad de Campos",
-                    "severity": "Baja",
-                    "rule": "Ocultar claves foráneas y columnas de relación técnicas",
-                    "target": f"{t['name']}[{cname}]",
-                    "detail": f"La columna de clave '{cname}' está visible en el panel de campos.",
-                    "impact": "Las claves no deben ser utilizadas directamente por los usuarios en tablas o filtros.",
-                    "recommendation": f"Establecer 'isHidden: true' en {t['name']}[{cname}]."
-                })
-
-            # --- REGLA PERSONALIZADA: SK y COD deben estar ocultos ---
-            if (cname.startswith("SK") or cname.startswith("COD")) and not c.get("isHidden"):
-                findings.append({
-                    "category": "Nomenclatura y Visibilidad (Estándar Corporativo)",
-                    "severity": "Alta",
-                    "rule": "Ocultar campos con prefijo SK o COD antes de publicar",
-                    "target": f"{t['name']}[{cname}]",
-                    "detail": f"El campo '{cname}' usa un prefijo técnico corporativo (SK/COD) y está visible en el panel de campos.",
-                    "impact": "Los campos SK (Surrogate Key) y COD (Código técnico) son internos al modelo y no deben ser accesibles para los usuarios finales del informe.",
-                    "recommendation": f"Establecer 'isHidden: true' en {t['name']}[{cname}] antes de publicar en el servicio Power BI."
-                })
-
-            # --- REGLA PERSONALIZADA: campos DES no deben existir ---
-            if cname.startswith("DES"):
+            # --- REGLA PERSONALIZADA: Ocultar campos de código / no descriptivos (Crítica) ---
+            is_code_or_sk = (
+                cname.startswith("SK") or cname.startswith("COD") or
+                cname.upper().startswith("CD_") or cname.upper().startswith("COD_") or
+                cname_lower.startswith("código") or cname_lower.startswith("codigo")
+            )
+            if is_code_or_sk and not c.get("isHidden"):
                 findings.append({
                     "category": "Nomenclatura y Visibilidad (Estándar Corporativo)",
                     "severity": "Crítica",
-                    "rule": "Eliminar campos con prefijo DES del modelo publicado",
+                    "rule": "Ocultar campos cuyo contenido no sea descriptivo (campos de código normalmente)",
                     "target": f"{t['name']}[{cname}]",
-                    "detail": f"El campo '{cname}' conserva el prefijo técnico 'DES', lo que indica que no fue renombrado en Power Query durante la carga.",
-                    "impact": "Según el estándar corporativo, los campos 'DES' deben ser transformados y renombrados en la query de carga (Power Query) antes de llegar al modelo semántico. Su presencia implica un incumplimiento del proceso de preparación de datos.",
-                    "recommendation": f"Acceder a Power Query, localizar la columna '{cname}' en la tabla '{t['name']}' y renombrarla con el nombre de negocio correspondiente antes de cargar el modelo."
+                    "detail": f"El campo '{cname}' es un código técnico o sustituto (SK/COD/Código) y está visible en el panel de campos sin valor descriptivo para el usuario final.",
+                    "impact": "Los campos de código o claves técnicas no son descriptivos para el usuario final y no deben exponerse en el panel de visualización del informe.",
+                    "recommendation": f"Establecer 'isHidden: true' en {t['name']}[{cname}] antes de publicar en el servicio Power BI."
+                })
+            else:
+                is_key = cname_lower.endswith("key") or cname_lower.endswith("id") or cname_lower.startswith("id_") or cname_lower == "id"
+                if is_key and not c.get("isHidden"):
+                    findings.append({
+                        "category": "Visibilidad de Campos",
+                        "severity": "Baja",
+                        "rule": "Ocultar claves foráneas y columnas de relación técnicas",
+                        "target": f"{t['name']}[{cname}]",
+                        "detail": f"La columna de clave '{cname}' está visible en el panel de campos.",
+                        "impact": "Las claves no deben ser utilizadas directamente por los usuarios en tablas o filtros.",
+                        "recommendation": f"Establecer 'isHidden: true' en {t['name']}[{cname}]."
+                    })
+
+            # --- REGLA PERSONALIZADA: campos DES deben renombrarse a descriptivos (Alta) ---
+            if cname.startswith("DES"):
+                findings.append({
+                    "category": "Nomenclatura y Visibilidad (Estándar Corporativo)",
+                    "severity": "Alta",
+                    "rule": "Renombrar campos con prefijo DES a un nombre descriptivo",
+                    "target": f"{t['name']}[{cname}]",
+                    "detail": f"El campo '{cname}' conserva el prefijo técnico 'DES'. No debe eliminarse del modelo, sino renombrarse a un nombre de negocio descriptivo.",
+                    "impact": "Según el estándar corporativo, los campos 'DES' no deben ser eliminados sino renombrados en Power Query a un término de negocio comprensible antes de llegar al modelo semántico.",
+                    "recommendation": f"Acceder a Power Query, localizar la columna '{cname}' en la tabla '{t['name']}' y renombrarla con el nombre de negocio descriptivo correspondiente (sin el prefijo 'DES', no eliminar la columna)."
                 })
 
             dtype = c.get("dataType", "").lower()
@@ -425,7 +430,7 @@ def run_static_checks(model_data: Dict[str, Any], report_data: Dict[str, Any] = 
                 if not re.search(pattern, combined_haystack, re.IGNORECASE):
                     findings.append({
                         "category": "Limpieza de Modelo (Elementos Huérfanos)",
-                        "severity": "Alta",
+                        "severity": "Crítica",
                         "rule": "Eliminar columnas físicas no utilizadas",
                         "target": f"{t['name']}[{cname}]",
                         "detail": f"La columna '{cname}' de '{t['name']}' no aparece en ningún visual del reporte, ni en DAX, ni en relaciones.",
