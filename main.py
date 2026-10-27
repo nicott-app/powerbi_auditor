@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,14 +27,71 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Permitir CORS para integración web
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# -------------------------------------------------------------------------
+# SEGURIDAD: CORS RESTRINGIDO
+# -------------------------------------------------------------------------
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+if allowed_origins_env:
+    origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:8000",
+            "http://127.0.0.1:8000"
+        ],
+        allow_origin_regex=r"^https://.*\.onrender\.com$",
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
+
+# -------------------------------------------------------------------------
+# SEGURIDAD: LÍMITE DE TAMAÑO DE ARCHIVO (POR DEFECTO 50 MB)
+# -------------------------------------------------------------------------
+def validate_file_size(file: UploadFile):
+    """Verifica que el archivo no supere el tamaño máximo permitido para proteger la RAM."""
+    max_mb = int(os.getenv("MAX_UPLOAD_SIZE_MB", 50))
+    max_bytes = max_mb * 1024 * 1024
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+    if size > max_bytes:
+        size_mb = size / (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"El archivo ({size_mb:.1f} MB) supera el límite máximo permitido de {max_mb} MB. Recuerde que los proyectos PBIP solo contienen código y metadatos."
+        )
+
+# -------------------------------------------------------------------------
+# SEGURIDAD: CONTROL DE ACCESO (CLAVE DE EQUIPO)
+# -------------------------------------------------------------------------
+def verify_access_key(x_access_key: Optional[str] = Header(None)):
+    """Valida la clave de acceso del equipo si la variable APP_ACCESS_KEY está definida."""
+    required_key = os.getenv("APP_ACCESS_KEY", "").strip()
+    if not required_key:
+        return True # Si no está configurada, el acceso es libre (modo desarrollo)
+    if not x_access_key or x_access_key != required_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Clave de acceso de equipo incorrecta o no suministrada."
+        )
+    return True
+
+@app.get("/api/v1/auth/status")
+def auth_status(x_access_key: Optional[str] = Header(None)):
+    """Informa al frontend si la autenticación está activa y si la clave del cliente es válida."""
+    required_key = os.getenv("APP_ACCESS_KEY", "").strip()
+    if not required_key:
+        return {"auth_required": False, "authenticated": True}
+    return {"auth_required": True, "authenticated": (x_access_key == required_key)}
 
 # Inicializar motor RAG
 rag_engine = PowerBIRAG()
@@ -68,7 +125,7 @@ class FolderAuditRequest(BaseModel):
     api_key: Optional[str] = None
 
 @app.post("/api/v1/audit/folder")
-def audit_folder(req: FolderAuditRequest):
+def audit_folder(req: FolderAuditRequest, auth: bool = Depends(verify_access_key)):
     """
     Audita una carpeta de proyecto PBIP existente en el servidor o disco local.
     """
@@ -100,12 +157,14 @@ def audit_folder(req: FolderAuditRequest):
         raise HTTPException(status_code=500, detail=f"Error durante la auditoría: {str(e)}")
 
 @app.post("/api/v1/audit/upload-zip")
-async def audit_upload_zip(file: UploadFile = File(...), api_key: Optional[str] = Form(None)):
+async def audit_upload_zip(file: UploadFile = File(...), api_key: Optional[str] = Form(None), auth: bool = Depends(verify_access_key)):
     """
     Recibe un archivo comprimido .zip con la estructura de un proyecto .pbip y ejecuta la auditoría.
     """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="El archivo enviado debe tener extensión .zip.")
+
+    validate_file_size(file)
 
     temp_dir = tempfile.mkdtemp(prefix="pbi_audit_")
     try:
@@ -143,12 +202,14 @@ from fastapi.responses import StreamingResponse
 from services.docs_service import generate_technical_docs
 
 @app.post("/api/v1/docs/upload-zip")
-async def docs_upload_zip(file: UploadFile = File(...), api_key: Optional[str] = Form(None)):
+async def docs_upload_zip(file: UploadFile = File(...), api_key: Optional[str] = Form(None), auth: bool = Depends(verify_access_key)):
     """
     Recibe un archivo comprimido .zip con la estructura .pbip y genera la Documentación en Word (.docx).
     """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="El archivo enviado debe tener extensión .zip.")
+
+    validate_file_size(file)
 
     temp_dir = tempfile.mkdtemp(prefix="pbi_docs_")
     try:
@@ -183,13 +244,15 @@ async def docs_upload_zip(file: UploadFile = File(...), api_key: Optional[str] =
 from services.dax_optimizer_service import analyze_and_optimize_dax
 
 @app.post("/api/v1/dax/optimize")
-async def optimize_dax_endpoint(file: UploadFile = File(...), api_key: str = Form(None)):
+async def optimize_dax_endpoint(file: UploadFile = File(...), api_key: str = Form(None), auth: bool = Depends(verify_access_key)):
     """
     Analiza las métricas DAX del modelo en busca de antipatrones y solicita una refactorización a Groq.
     Devuelve un JSON con el código original y el optimizado.
     """
     if not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="El archivo debe ser un .zip del PBIP")
+
+    validate_file_size(file)
 
     temp_dir = tempfile.mkdtemp(prefix="pbi_dax_")
 
@@ -214,12 +277,12 @@ async def optimize_dax_endpoint(file: UploadFile = File(...), api_key: str = For
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 @app.get("/api/v1/history")
-def list_audit_history(limit: int = 50):
+def list_audit_history(limit: int = 50, auth: bool = Depends(verify_access_key)):
     """Retorna el listado cronológico de auditorías pasadas."""
     return get_history(limit=limit)
 
 @app.get("/api/v1/history/{audit_id}")
-def get_audit_history_item(audit_id: int):
+def get_audit_history_item(audit_id: int, auth: bool = Depends(verify_access_key)):
     """Obtiene el reporte completo de una auditoría guardada por su ID."""
     record = get_audit(audit_id)
     if not record:
@@ -227,7 +290,7 @@ def get_audit_history_item(audit_id: int):
     return record
 
 @app.delete("/api/v1/history/{audit_id}")
-def delete_audit_history_item(audit_id: int):
+def delete_audit_history_item(audit_id: int, auth: bool = Depends(verify_access_key)):
     """Elimina un registro del historial."""
     success = delete_audit(audit_id)
     if not success:
@@ -237,7 +300,7 @@ def delete_audit_history_item(audit_id: int):
 from services.excel_service import generate_audit_excel
 
 @app.post("/api/v1/audit/export-excel")
-async def export_audit_excel(report: dict):
+async def export_audit_excel(report: dict, auth: bool = Depends(verify_access_key)):
     """
     Recibe el JSON del reporte de auditoría generado previamente y devuelve un archivo Excel descargable.
     """

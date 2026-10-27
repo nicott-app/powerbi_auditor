@@ -185,6 +185,9 @@
                 <button class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#historyModal" id="btnOpenHistory">
                     <i class="bi bi-clock-history"></i> <span>Historial</span>
                 </button>
+                <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1 d-none text-light border-secondary" id="btnLockApp" onclick="lockApplication()" title="Cerrar sesión de equipo">
+                    <i class="bi bi-shield-lock"></i> <span class="d-none d-md-inline">Bloquear</span>
+                </button>
                 <span class="badge bg-secondary" id="serviceStatus"><i class="bi bi-cpu"></i> Conectando...</span>
                 <span class="badge bg-light text-dark border"><i class="bi bi-stars text-warning"></i> RAG Grounded</span>
             </div>
@@ -507,6 +510,39 @@
         </div>
     </div>
 
+    <!-- Modal Control de Acceso (Clave de Equipo) -->
+    <div class="modal fade" id="accessModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="accessModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-dark text-white border-bottom-0">
+                    <h5 class="modal-title fw-bold" id="accessModalLabel">
+                        <i class="bi bi-shield-lock-fill text-warning me-2"></i>Acceso de Equipo Restringido
+                    </h5>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <p class="small text-secondary mb-3">Este entorno de auditoría está protegido. Introduce la <strong>clave de paso del equipo</strong> para desbloquear las operaciones.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">CLAVE DE ACCESO</label>
+                        <div class="input-group">
+                            <input type="password" id="teamAccessKeyInput" class="form-control" placeholder="Introduce la clave de acceso...">
+                            <button class="btn btn-outline-secondary" type="button" id="btnToggleAccessPass">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        <div id="accessKeyError" class="text-danger small mt-2 d-none">
+                            <i class="bi bi-exclamation-circle-fill me-1"></i> Clave incorrecta. Inténtalo de nuevo.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 bg-light pt-0">
+                    <button type="button" class="btn btn-pbi-primary w-100" id="btnSubmitAccessKey">
+                        <i class="bi bi-unlock-fill me-1"></i> Desbloquear Acceso
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Lógica JS -->
     <script>
         // DOM Elements
@@ -517,6 +553,124 @@
         const loadingTitle = document.getElementById('loadingTitle');
         let radarChartInstance = null;
         let currentReport = null;
+
+        // --- CONTROL DE ACCESO (CLAVE DE EQUIPO) Y API WRAPPER ---
+        function getAccessKey() {
+            return localStorage.getItem('pbi_access_key') || '';
+        }
+
+        function setAccessKey(key) {
+            localStorage.setItem('pbi_access_key', key);
+        }
+
+        function clearAccessKey() {
+            localStorage.removeItem('pbi_access_key');
+        }
+
+        async function apiFetch(url, options = {}) {
+            options.headers = options.headers || {};
+            const key = getAccessKey();
+            if (key) {
+                if (options.headers instanceof Headers) {
+                    options.headers.set('X-Access-Key', key);
+                } else {
+                    options.headers['X-Access-Key'] = key;
+                }
+            }
+            
+            const res = await fetch(url, options);
+            if (res.status === 401) {
+                showAccessModal();
+                throw new Error("Acceso no autorizado: introduce la clave de acceso de equipo.");
+            }
+            return res;
+        }
+
+        let accessModalInstance = null;
+        function showAccessModal() {
+            const el = document.getElementById('accessModal');
+            if (!accessModalInstance && window.bootstrap) {
+                accessModalInstance = new bootstrap.Modal(el);
+            }
+            document.getElementById('accessKeyError').classList.add('d-none');
+            document.getElementById('teamAccessKeyInput').value = '';
+            accessModalInstance.show();
+        }
+
+        function lockApplication() {
+            clearAccessKey();
+            showAccessModal();
+        }
+
+        async function checkAuthStatus() {
+            try {
+                const res = await fetch('/api/v1/auth/status', {
+                    headers: { 'X-Access-Key': getAccessKey() }
+                });
+                const data = await res.json();
+                const btnLock = document.getElementById('btnLockApp');
+                if (data.auth_required) {
+                    if (btnLock) btnLock.classList.remove('d-none');
+                    if (!data.authenticated) {
+                        showAccessModal();
+                    }
+                } else {
+                    if (btnLock) btnLock.classList.add('d-none');
+                }
+            } catch (e) {
+                console.warn("Auth check failed:", e);
+            }
+        }
+
+        document.getElementById('btnToggleAccessPass')?.addEventListener('click', () => {
+            const inp = document.getElementById('teamAccessKeyInput');
+            const icon = document.querySelector('#btnToggleAccessPass i');
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                inp.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        });
+
+        document.getElementById('btnSubmitAccessKey')?.addEventListener('click', async () => {
+            const key = document.getElementById('teamAccessKeyInput').value.trim();
+            const errDiv = document.getElementById('accessKeyError');
+            if (!key) {
+                errDiv.innerText = "Por favor, introduce la clave.";
+                errDiv.classList.remove('d-none');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/v1/auth/status', {
+                    headers: { 'X-Access-Key': key }
+                });
+                const data = await res.json();
+                if (data.authenticated) {
+                    setAccessKey(key);
+                    errDiv.classList.add('d-none');
+                    if (accessModalInstance) accessModalInstance.hide();
+                    document.getElementById('btnLockApp')?.classList.remove('d-none');
+                } else {
+                    errDiv.innerText = "Clave incorrecta. Inténtalo de nuevo.";
+                    errDiv.classList.remove('d-none');
+                }
+            } catch (err) {
+                errDiv.innerText = "Error validando clave: " + err.message;
+                errDiv.classList.remove('d-none');
+            }
+        });
+
+        document.getElementById('teamAccessKeyInput')?.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('btnSubmitAccessKey').click();
+            }
+        });
+
+        // Verificar autenticación al inicio
+        checkAuthStatus();
 
         // Health Check
         fetch('/health')
@@ -557,7 +711,7 @@
 
             showLoading(true, "Auditando Modelo...");
             try {
-                const res = await fetch('/api/v1/audit/upload-zip', { method: 'POST', body: formData });
+                const res = await apiFetch('/api/v1/audit/upload-zip', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error((await res.json()).detail || "Error interno");
                 const data = await res.json();
                 renderReport(data.audit_report);
@@ -859,7 +1013,7 @@
             btn.disabled = true;
 
             try {
-                const res = await fetch('/api/v1/audit/export-excel', {
+                const res = await apiFetch('/api/v1/audit/export-excel', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(currentReport)
@@ -890,7 +1044,7 @@
 
             showLoading(true, "Redactando Documentación Word...");
             try {
-                const res = await fetch('/api/v1/docs/upload-zip', { method: 'POST', body: formData });
+                const res = await apiFetch('/api/v1/docs/upload-zip', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error((await res.json()).detail);
                 
                 const blob = await res.blob();
@@ -920,7 +1074,7 @@
 
             showLoading(true, "Analizando DAX con Inteligencia Artificial...");
             try {
-                const res = await fetch('/api/v1/dax/optimize', { method: 'POST', body: formData });
+                const res = await apiFetch('/api/v1/dax/optimize', { method: 'POST', body: formData });
                 if (!res.ok) throw new Error((await res.json()).detail);
                 renderDaxResults(await res.json());
             } catch (err) {
@@ -986,7 +1140,7 @@
             const tbody = document.getElementById('historyTableBody');
             tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-hourglass-split me-2"></i> Cargando historial...</td></tr>`;
             try {
-                const res = await fetch('/api/v1/history');
+                const res = await apiFetch('/api/v1/history');
                 if (!res.ok) throw new Error("Error al obtener historial");
                 const list = await res.json();
                 
@@ -1032,7 +1186,7 @@
         async function viewHistoricalAudit(id) {
             showLoading(true, "Cargando auditoría guardada...");
             try {
-                const res = await fetch(`/api/v1/history/${id}`);
+                const res = await apiFetch(`/api/v1/history/${id}`);
                 if (!res.ok) throw new Error("No se pudo cargar la auditoría");
                 const data = await res.json();
                 
@@ -1051,7 +1205,7 @@
         async function deleteHistoricalAudit(id) {
             if (!confirm("¿Deseas eliminar este registro del historial?")) return;
             try {
-                const res = await fetch(`/api/v1/history/${id}`, { method: 'DELETE' });
+                const res = await apiFetch(`/api/v1/history/${id}`, { method: 'DELETE' });
                 if (!res.ok) throw new Error("No se pudo eliminar");
                 await loadAuditHistory();
             } catch (e) {
